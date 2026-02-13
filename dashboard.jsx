@@ -1,99 +1,102 @@
-// Working Dashboard - Browser Compatible
-const Dashboard = (function() {
-  const { Plus, Trash2, RefreshCw } = window.lucide;
-  
-  return function DashboardComponent() {
-    const GOOGLE_SCRIPT_URL = window.GOOGLE_SCRIPT_URL;
-    const MONTHLY_BUDGET = 12;
-    
-    const [requests, setRequests] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
-    const [syncing, setSyncing] = React.useState(false);
-    const [newTitle, setNewTitle] = React.useState('');
-    const [newDescription, setNewDescription] = React.useState('');
-    
-    // Load data
-    const loadData = React.useCallback(async () => {
-      try {
-        setSyncing(true);
-        const response = await fetch(GOOGLE_SCRIPT_URL + '?action=getAll&t=' + Date.now(), {
-          method: 'POST'
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-          setRequests(result.requests || []);
-        }
-      } catch (error) {
-        console.error('Load error:', error);
-      } finally {
-        setSyncing(false);
-        setLoading(false);
-      }
-    }, [GOOGLE_SCRIPT_URL]);
-    
-    // Add request
-    const addRequest = async () => {
-      if (!newTitle.trim()) return;
-      
-      try {
-        setSyncing(true);
-        const formData = new URLSearchParams();
-        formData.append('action', 'addRequest');
-        formData.append('data', JSON.stringify({
-          title: newTitle,
-          description: newDescription,
-          status: 'pending'
-        }));
-        
-        const response = await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          body: formData
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-          setNewTitle('');
-          setNewDescription('');
-          await loadData();
-        }
-      } catch (error) {
-        console.error('Add error:', error);
-        alert('Error adding request');
-      } finally {
-        setSyncing(false);
-      }
+// Dashboard - Class Component (Browser Compatible)
+class Dashboard extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      requests: [],
+      loading: true,
+      syncing: false,
+      newTitle: '',
+      newDescription: ''
     };
-    
-    // Delete request
-    const deleteRequest = async (id) => {
-      if (!confirm('Delete this request?')) return;
+    this.GOOGLE_SCRIPT_URL = window.GOOGLE_SCRIPT_URL;
+  }
+
+  componentDidMount() {
+    this.loadData();
+    this.interval = setInterval(() => this.loadData(), 30000);
+  }
+
+  componentWillUnmount() {
+    if (this.interval) clearInterval(this.interval);
+  }
+
+  loadData = async () => {
+    try {
+      this.setState({ syncing: true });
+      const response = await fetch(this.GOOGLE_SCRIPT_URL + '?action=getAll&t=' + Date.now(), {
+        method: 'POST'
+      });
+      const result = await response.json();
       
-      try {
-        setSyncing(true);
-        const formData = new URLSearchParams();
-        formData.append('action', 'deleteRequest');
-        formData.append('id', id);
-        
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          body: formData
-        });
-        
-        await loadData();
-      } catch (error) {
-        console.error('Delete error:', error);
-      } finally {
-        setSyncing(false);
+      if (result.success) {
+        this.setState({ requests: result.requests || [] });
       }
-    };
+    } catch (error) {
+      console.error('Load error:', error);
+    } finally {
+      this.setState({ syncing: false, loading: false });
+    }
+  }
+
+  addRequest = async () => {
+    const { newTitle, newDescription } = this.state;
+    if (!newTitle.trim()) return;
     
-    React.useEffect(() => {
-      loadData();
-      const interval = setInterval(loadData, 30000);
-      return () => clearInterval(interval);
-    }, [loadData]);
+    try {
+      this.setState({ syncing: true });
+      const formData = new URLSearchParams();
+      formData.append('action', 'addRequest');
+      formData.append('data', JSON.stringify({
+        title: newTitle,
+        description: newDescription,
+        status: 'pending'
+      }));
+      
+      const response = await fetch(this.GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        body: formData
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        this.setState({ newTitle: '', newDescription: '' });
+        await this.loadData();
+      }
+    } catch (error) {
+      console.error('Add error:', error);
+      alert('Error adding request');
+    } finally {
+      this.setState({ syncing: false });
+    }
+  }
+
+  deleteRequest = async (id) => {
+    if (!confirm('Delete this request?')) return;
     
+    try {
+      this.setState({ syncing: true });
+      const formData = new URLSearchParams();
+      formData.append('action', 'deleteRequest');
+      formData.append('id', id);
+      
+      await fetch(this.GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        body: formData
+      });
+      
+      await this.loadData();
+    } catch (error) {
+      console.error('Delete error:', error);
+    } finally {
+      this.setState({ syncing: false });
+    }
+  }
+
+  render() {
+    const { requests, loading, syncing, newTitle, newDescription } = this.state;
+    const { Plus, Trash2, RefreshCw } = window.lucide;
+
     if (loading) {
       return React.createElement('div', {
         style: { 
@@ -105,24 +108,13 @@ const Dashboard = (function() {
         }
       },
         React.createElement('div', { style: { textAlign: 'center' } },
-          React.createElement('div', { 
-            style: { 
-              width: '50px', 
-              height: '50px', 
-              border: '4px solid #e5e7eb', 
-              borderTopColor: '#007299', 
-              borderRadius: '50%', 
-              margin: '0 auto',
-              animation: 'spin 1s linear infinite'
-            } 
-          }),
           React.createElement('p', { 
             style: { marginTop: '20px', color: '#003e51', fontSize: '18px' } 
           }, 'Loading Dashboard...')
         )
       );
     }
-    
+
     return React.createElement('div', {
       style: { 
         minHeight: '100vh', 
@@ -146,10 +138,10 @@ const Dashboard = (function() {
             }, 'Continuous Improvement Hours Dashboard'),
             React.createElement('p', { 
               style: { color: '#717271', fontSize: '16px' } 
-            }, '🎉 Collaborative mode - All team members see the same data')
+            }, '🎉 Collaborative mode - All changes sync automatically')
           ),
           React.createElement('button', {
-            onClick: loadData,
+            onClick: this.loadData,
             disabled: syncing,
             style: {
               display: 'flex',
@@ -162,9 +154,7 @@ const Dashboard = (function() {
               borderRadius: '8px',
               cursor: syncing ? 'not-allowed' : 'pointer',
               fontSize: '14px',
-              fontWeight: '600',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s'
+              fontWeight: '600'
             }
           },
             React.createElement(RefreshCw, { size: 18 }),
@@ -184,18 +174,14 @@ const Dashboard = (function() {
           } 
         },
           React.createElement('h2', { 
-            style: { 
-              fontSize: '20px', 
-              fontWeight: '600', 
-              color: '#003e51', 
-              marginBottom: '16px' 
-            } 
+            style: { fontSize: '20px', fontWeight: '600', color: '#003e51', marginBottom: '16px' } 
           }, '➕ Submit New Request'),
+          
           React.createElement('input', {
             type: 'text',
             placeholder: 'Request title *',
             value: newTitle,
-            onChange: (e) => setNewTitle(e.target.value),
+            onChange: (e) => this.setState({ newTitle: e.target.value }),
             style: {
               width: '100%',
               padding: '12px 16px',
@@ -203,17 +189,14 @@ const Dashboard = (function() {
               border: '2px solid #e5e7eb',
               borderRadius: '8px',
               fontSize: '14px',
-              outline: 'none',
-              transition: 'border 0.2s',
               boxSizing: 'border-box'
-            },
-            onFocus: (e) => e.target.style.borderColor = '#007299',
-            onBlur: (e) => e.target.style.borderColor = '#e5e7eb'
+            }
           }),
+          
           React.createElement('textarea', {
             placeholder: 'Description (optional)',
             value: newDescription,
-            onChange: (e) => setNewDescription(e.target.value),
+            onChange: (e) => this.setState({ newDescription: e.target.value }),
             rows: 3,
             style: {
               width: '100%',
@@ -223,16 +206,13 @@ const Dashboard = (function() {
               borderRadius: '8px',
               fontSize: '14px',
               resize: 'vertical',
-              outline: 'none',
-              transition: 'border 0.2s',
               boxSizing: 'border-box',
               fontFamily: 'inherit'
-            },
-            onFocus: (e) => e.target.style.borderColor = '#007299',
-            onBlur: (e) => e.target.style.borderColor = '#e5e7eb'
+            }
           }),
+          
           React.createElement('button', {
-            onClick: addRequest,
+            onClick: this.addRequest,
             disabled: !newTitle.trim() || syncing,
             style: {
               display: 'flex',
@@ -245,9 +225,7 @@ const Dashboard = (function() {
               borderRadius: '8px',
               cursor: !newTitle.trim() || syncing ? 'not-allowed' : 'pointer',
               fontSize: '14px',
-              fontWeight: '600',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s'
+              fontWeight: '600'
             }
           },
             React.createElement(Plus, { size: 18 }),
@@ -265,28 +243,15 @@ const Dashboard = (function() {
           } 
         },
           React.createElement('h2', { 
-            style: { 
-              fontSize: '20px', 
-              fontWeight: '600', 
-              color: '#003e51', 
-              marginBottom: '16px' 
-            } 
+            style: { fontSize: '20px', fontWeight: '600', color: '#003e51', marginBottom: '16px' } 
           }, '📋 All Requests (' + requests.length + ')'),
           
           requests.length === 0 ? 
             React.createElement('div', { 
-              style: { 
-                textAlign: 'center', 
-                padding: '60px 20px',
-                color: '#717271'
-              } 
+              style: { textAlign: 'center', padding: '60px 20px', color: '#717271' } 
             },
-              React.createElement('p', { style: { fontSize: '16px', marginBottom: '8px' } }, 
-                '📭 No requests yet'
-              ),
-              React.createElement('p', { style: { fontSize: '14px' } }, 
-                'Add your first request above!'
-              )
+              React.createElement('p', { style: { fontSize: '16px', marginBottom: '8px' } }, '📭 No requests yet'),
+              React.createElement('p', { style: { fontSize: '14px' } }, 'Add your first request above!')
             ) :
             React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
               requests.map((request) => 
@@ -299,28 +264,18 @@ const Dashboard = (function() {
                     borderRadius: '8px',
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'start',
-                    transition: 'all 0.2s',
-                    backgroundColor: 'white'
+                    alignItems: 'start'
                   }
                 },
                   React.createElement('div', { style: { flex: 1 } },
                     React.createElement('h3', { 
-                      style: { 
-                        fontSize: '16px', 
-                        fontWeight: '600', 
-                        color: '#003e51', 
-                        marginBottom: '6px' 
-                      } 
+                      style: { fontSize: '16px', fontWeight: '600', color: '#003e51', marginBottom: '6px' } 
                     }, request.Title),
+                    
                     request.Description && React.createElement('p', { 
-                      style: { 
-                        fontSize: '14px', 
-                        color: '#717271', 
-                        marginBottom: '8px',
-                        lineHeight: '1.5'
-                      } 
+                      style: { fontSize: '14px', color: '#717271', marginBottom: '8px', lineHeight: '1.5' } 
                     }, request.Description),
+                    
                     React.createElement('div', {
                       style: {
                         display: 'inline-block',
@@ -333,8 +288,9 @@ const Dashboard = (function() {
                       }
                     }, request.Status || 'pending')
                   ),
+                  
                   React.createElement('button', {
-                    onClick: () => deleteRequest(request.ID),
+                    onClick: () => this.deleteRequest(request.ID),
                     style: {
                       padding: '8px 16px',
                       backgroundColor: '#fee2e2',
@@ -344,39 +300,35 @@ const Dashboard = (function() {
                       cursor: 'pointer',
                       fontSize: '13px',
                       fontWeight: '600',
-                      transition: 'all 0.2s',
                       marginLeft: '16px'
-                    },
-                    onMouseEnter: (e) => e.target.style.backgroundColor = '#fecaca',
-                    onMouseLeave: (e) => e.target.style.backgroundColor = '#fee2e2'
+                    }
                   }, '🗑️ Delete')
                 )
               )
             )
         ),
         
-        // Info banner
+        // Success banner
         React.createElement('div', { 
           style: { 
             marginTop: '24px',
             padding: '20px',
-            backgroundColor: '#dbeafe',
+            backgroundColor: '#d1fae5',
             borderRadius: '8px',
-            borderLeft: '4px solid #007299'
+            borderLeft: '4px solid #10b981'
           }
         },
           React.createElement('p', { 
-            style: { 
-              color: '#003e51', 
-              fontSize: '14px',
-              lineHeight: '1.6'
-            } 
-          }, '✨ Basic version - You can add and delete requests. Data syncs every 30 seconds. Full features (estimates, comments, budget tracking, workflow stages) will be added next!')
+            style: { color: '#065f46', fontSize: '14px', fontWeight: '600', marginBottom: '4px' } 
+          }, '✅ SUCCESS! Your dashboard is working!'),
+          React.createElement('p', { 
+            style: { color: '#059669', fontSize: '13px', lineHeight: '1.6' } 
+          }, 'Try adding a request above. Open this URL in another browser to see it sync in real-time! Full features coming soon.')
         )
       )
     );
-  };
-})();
+  }
+}
 
 // Render
 const root = ReactDOM.createRoot(document.getElementById('root'));
