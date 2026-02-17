@@ -103,6 +103,8 @@ class Dashboard extends React.Component {
     const reader = new FileReader();
     reader.onloadend = () => {
       if (target === 'estimate') {
+        // Set both the type and the data
+        this.setState({ attachmentType: type });
         if (type === 'pdf') this.setState({ attachmentInput: reader.result });
         else this.setState({ imagePreview: reader.result });
       } else {
@@ -263,13 +265,36 @@ class Dashboard extends React.Component {
     if (direction === 'up' && index > 0) {
       const req1 = estimatedOnly[index];
       const req2 = estimatedOnly[index - 1];
+      const tempPriority = req1.Priority;
+      
+      // Optimistically update UI immediately
+      const updatedRequests = requests.map(r => {
+        if (r.ID == req1.ID) return { ...r, Priority: req2.Priority };
+        if (r.ID == req2.ID) return { ...r, Priority: tempPriority };
+        return r;
+      });
+      this.setState({ requests: updatedRequests });
+      
+      // Save to backend
       await this.apiCall('updateRequest', { data: { ...req1, Priority: req2.Priority } });
-      await this.apiCall('updateRequest', { data: { ...req2, Priority: req1.Priority } });
+      await this.apiCall('updateRequest', { data: { ...req2, Priority: tempPriority } });
+      
     } else if (direction === 'down' && index < estimatedOnly.length - 1) {
       const req1 = estimatedOnly[index];
       const req2 = estimatedOnly[index + 1];
+      const tempPriority = req1.Priority;
+      
+      // Optimistically update UI immediately
+      const updatedRequests = requests.map(r => {
+        if (r.ID == req1.ID) return { ...r, Priority: req2.Priority };
+        if (r.ID == req2.ID) return { ...r, Priority: tempPriority };
+        return r;
+      });
+      this.setState({ requests: updatedRequests });
+      
+      // Save to backend
       await this.apiCall('updateRequest', { data: { ...req1, Priority: req2.Priority } });
-      await this.apiCall('updateRequest', { data: { ...req2, Priority: req1.Priority } });
+      await this.apiCall('updateRequest', { data: { ...req2, Priority: tempPriority } });
     }
   }
 
