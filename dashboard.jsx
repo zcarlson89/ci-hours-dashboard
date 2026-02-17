@@ -53,8 +53,16 @@ class Dashboard extends React.Component {
       const res = await fetch(window.GOOGLE_SCRIPT_URL + '?action=getAll&t=' + Date.now(), { method: 'POST' });
       const data = await res.json();
       if (data.success) {
+        // Parse comments properly - they come as JSON strings from Google Sheets
+        const requestsWithParsedComments = (data.requests || []).map(req => ({
+          ...req,
+          Comments: typeof req.Comments === 'string' ? 
+            (req.Comments ? JSON.parse(req.Comments) : []) : 
+            (req.Comments || [])
+        }));
+        
         this.setState({ 
-          requests: data.requests || [], 
+          requests: requestsWithParsedComments, 
           monthlyHistory: data.history || {},
           currentMonth: data.settings.current_month || this.getCurrentMonthKey()
         });
@@ -107,14 +115,20 @@ class Dashboard extends React.Component {
   add = async () => {
     if (!this.state.newTitle) return;
     
+    // Save current values before clearing form
+    const title = this.state.newTitle;
+    const desc = this.state.newDesc;
+    const attachType = this.state.newAttachmentType;
+    const attachData = this.state.newAttachmentData;
+    
     // OPTIMISTIC UPDATE - show new request immediately
     const tempRequest = {
       ID: Date.now(),
-      Title: this.state.newTitle,
-      Description: this.state.newDesc,
+      Title: title,
+      Description: desc,
       Status: 'pending',
-      SubmitterAttachmentType: this.state.newAttachmentType,
-      SubmitterAttachmentData: this.state.newAttachmentData,
+      SubmitterAttachmentType: attachType,
+      SubmitterAttachmentData: attachData,
       Comments: []
     };
     
@@ -129,11 +143,11 @@ class Dashboard extends React.Component {
     // Save to backend in background
     await this.apiCall('addRequest', {
       data: {
-        title: this.state.newTitle, 
-        description: this.state.newDesc, 
+        title: title, 
+        description: desc, 
         status: 'pending',
-        submitterAttachmentType: this.state.newAttachmentType,
-        submitterAttachmentData: this.state.newAttachmentData,
+        submitterAttachmentType: attachType,
+        submitterAttachmentData: attachData,
         comments: []
       }
     });
@@ -318,22 +332,22 @@ class Dashboard extends React.Component {
     return (
       <div style={{display:'flex',gap:'8px',marginTop:'8px',flexWrap:'wrap'}}>
         {request.SubmitterAttachmentType === 'pdf' && request.SubmitterAttachmentData && (
-          <a href={request.SubmitterAttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#e6f4ea',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+          <a href={request.SubmitterAttachmentData} download="submitter-document.pdf" target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#e6f4ea',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
             📄 Submitter PDF
           </a>
         )}
         {request.SubmitterAttachmentType === 'image' && request.SubmitterAttachmentData && (
-          <a href={request.SubmitterAttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#e6f4ea',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+          <a href={request.SubmitterAttachmentData} download="submitter-image.png" target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#e6f4ea',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
             🖼️ Submitter Image
           </a>
         )}
         {request.AttachmentType === 'pdf' && request.AttachmentData && (
-          <a href={request.AttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#dbeafe',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+          <a href={request.AttachmentData} download="estimate-document.pdf" target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#dbeafe',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
             📄 Estimate PDF
           </a>
         )}
         {request.AttachmentType === 'image' && request.AttachmentData && (
-          <a href={request.AttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#dbeafe',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+          <a href={request.AttachmentData} download="estimate-image.png" target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#dbeafe',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
             🖼️ Estimate Image
           </a>
         )}
