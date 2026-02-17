@@ -99,7 +99,7 @@ class Dashboard extends React.Component {
             <p style={{color:'#717271'}}>🎉 Collaborative mode with Budget Tracking</p>
           </div>
           <button onClick={this.load} disabled={syncing} style={{padding:'12px 24px',background:syncing?'#717271':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:syncing?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:'8px',height:'fit-content'}}>
-            <RefreshCw size={18} />
+            {React.createElement(RefreshCw, { size: 18 })}
             {syncing ? 'Syncing...' : 'Refresh'}
           </button>
         </div>
@@ -116,7 +116,7 @@ class Dashboard extends React.Component {
                 onClick={() => this.setState({showHistory: !showHistory})} 
                 style={{padding:'8px 16px',background:'#717271',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',gap:'6px'}}
               >
-                <History size={16} />
+                {React.createElement(History, { size: 16 })}
                 {showHistory ? 'Hide' : 'View'} History
               </button>
               <div style={{textAlign:'right'}}>
@@ -193,7 +193,7 @@ class Dashboard extends React.Component {
             style={{width:'100%',padding:'12px',marginBottom:'16px',border:'2px solid #e5e7eb',borderRadius:'8px',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical'}}
           />
           <button onClick={this.add} disabled={!this.state.newTitle||syncing} style={{padding:'12px 24px',background:!this.state.newTitle||syncing?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:!this.state.newTitle||syncing?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:'8px'}}>
-            <Plus size={18} />
+            {React.createElement(Plus, { size: 18 })}
             Submit
           </button>
         </div>
