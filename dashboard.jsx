@@ -98,17 +98,29 @@ class Dashboard extends React.Component {
 
   handleFileUpload = (e, type, target) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+    
+    console.log('File selected:', file.name, 'Type:', type, 'Target:', target);
     
     const reader = new FileReader();
     reader.onloadend = () => {
+      console.log('File loaded, data length:', reader.result.length);
       if (target === 'estimate') {
         // Set both the type and the data
         this.setState({ attachmentType: type });
-        if (type === 'pdf') this.setState({ attachmentInput: reader.result });
-        else this.setState({ imagePreview: reader.result });
+        if (type === 'pdf') {
+          this.setState({ attachmentInput: reader.result });
+          console.log('PDF set for estimate, attachmentInput length:', reader.result.length);
+        } else {
+          this.setState({ imagePreview: reader.result });
+          console.log('Image set for estimate');
+        }
       } else {
         this.setState({ newAttachmentType: type, newAttachmentData: reader.result });
+        console.log('Attachment set for new request');
       }
     };
     reader.readAsDataURL(file);
@@ -171,23 +183,58 @@ class Dashboard extends React.Component {
     const estimatedRequests = requests.filter(r => r.Status === 'estimated' || r.Status === 'approved');
     const maxPriority = estimatedRequests.length > 0 ? Math.max(...estimatedRequests.map(r => r.Priority || 0)) : 0;
     
-    const success = await this.apiCall('updateRequest', {
+    console.log('Adding estimate - attachmentType:', attachmentType);
+    console.log('attachmentInput length:', attachmentInput ? attachmentInput.length : 'null');
+    console.log('imagePreview length:', imagePreview ? imagePreview.length : 'null');
+    
+    const attachmentData = attachmentType === 'pdf' ? attachmentInput : (attachmentType === 'image' ? imagePreview : null);
+    console.log('Final attachmentData length:', attachmentData ? attachmentData.length : 'null');
+    
+    // OPTIMISTIC UPDATE - show change immediately
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? {
+        ...r,
+        Status: 'estimated',
+        EstimatedHours: parseFloat(hours),
+        Priority: maxPriority + 1,
+        AttachmentType: attachmentType,
+        AttachmentData: attachmentData
+      } : r
+    );
+    
+    this.setState({ 
+      requests: updatedRequests,
+      editingEstimate: null, 
+      estimateInput: '', 
+      attachmentType: null, 
+      attachmentInput: '', 
+      imagePreview: null 
+    });
+    
+    // Save to backend in background
+    await this.apiCall('updateRequest', {
       data: { 
         ...request, 
         Status: 'estimated', 
         EstimatedHours: parseFloat(hours), 
         Priority: maxPriority + 1,
         AttachmentType: attachmentType,
-        AttachmentData: attachmentType === 'pdf' ? attachmentInput : (attachmentType === 'image' ? imagePreview : null)
+        AttachmentData: attachmentData
       }
     });
-    
-    if (success) this.setState({ editingEstimate: null, estimateInput: '', attachmentType: null, attachmentInput: '', imagePreview: null });
   }
 
   approveRequest = async (id) => {
     const { requests, currentMonth } = this.state;
     const request = requests.find(r => r.ID == id);
+    
+    // OPTIMISTIC UPDATE - show change immediately
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, Status: 'approved', ApprovedMonth: currentMonth } : r
+    );
+    this.setState({ requests: updatedRequests });
+    
+    // Save to backend
     await this.apiCall('updateRequest', {
       data: { ...request, Status: 'approved', ApprovedMonth: currentMonth }
     });
@@ -205,6 +252,14 @@ class Dashboard extends React.Component {
   markAsDone = async (id) => {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
+    
+    // OPTIMISTIC UPDATE
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, Status: 'finished', CompletedDate: new Date().toLocaleDateString() } : r
+    );
+    this.setState({ requests: updatedRequests });
+    
+    // Save to backend
     await this.apiCall('updateRequest', {
       data: { ...request, Status: 'finished', CompletedDate: new Date().toLocaleDateString() }
     });
@@ -213,6 +268,14 @@ class Dashboard extends React.Component {
   archiveRequest = async (id) => {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
+    
+    // OPTIMISTIC UPDATE
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, Status: 'archived' } : r
+    );
+    this.setState({ requests: updatedRequests });
+    
+    // Save to backend
     await this.apiCall('updateRequest', {
       data: { ...request, Status: 'archived' }
     });
@@ -761,20 +824,6 @@ class Dashboard extends React.Component {
             )
           )}
         </div>
-
-        <div style={{marginTop:'24px',padding:'20px',background:'#dcfce7',borderRadius:'8px',borderLeft:'4px solid #10b981'}}>
-          <p style={{color:'#065f46',fontSize:'14px',fontWeight:'600',marginBottom:'8px'}}>🎉 Complete Dashboard!</p>
-          <p style={{color:'#059669',fontSize:'14px',lineHeight:'1.6'}}>
-            ✅ Budget tracking with monthly history<br/>
-            ✅ Complete workflow (Pending → Estimated → Approved → Finished → Archived)<br/>
-            ✅ Comments system (KPCS ↔ Engineering Services)<br/>
-            ✅ File attachments (PDF & PNG) for submitters and coders<br/>
-            ✅ Priority ordering & estimate editing<br/>
-            ✅ Real-time collaboration via Google Sheets
-          </p>
-        </div>
-
-      </div>
     </div>;
   }
 }
