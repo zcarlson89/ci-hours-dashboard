@@ -12,10 +12,20 @@ class Dashboard extends React.Component {
     deleteConfirmId: null,
     editingEstimate: null,
     estimateInput: '',
+    attachmentType: null,
+    attachmentInput: '',
+    imagePreview: null,
     editingCompletionDate: null,
     completionDateInput: '',
+    editingPrioritizedEstimate: null,
+    prioritizedEstimateInput: '',
+    commentingOn: null,
+    commentInput: '',
+    commentAuthor: 'KPCS',
     newTitle: '',
-    newDesc: ''
+    newDesc: '',
+    newAttachmentType: null,
+    newAttachmentData: null
   }
 
   MONTHLY_BUDGET = 12;
@@ -78,16 +88,35 @@ class Dashboard extends React.Component {
     }
   }
 
+  handleFileUpload = (e, type, target) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (target === 'estimate') {
+        if (type === 'pdf') this.setState({ attachmentInput: reader.result });
+        else this.setState({ imagePreview: reader.result });
+      } else {
+        this.setState({ newAttachmentType: type, newAttachmentData: reader.result });
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
   add = async () => {
     if (!this.state.newTitle) return;
     await this.apiCall('addRequest', {
       data: {
         title: this.state.newTitle, 
         description: this.state.newDesc, 
-        status: 'pending'
+        status: 'pending',
+        submitterAttachmentType: this.state.newAttachmentType,
+        submitterAttachmentData: this.state.newAttachmentData,
+        comments: []
       }
     });
-    this.setState({ newTitle: '', newDesc: '' });
+    this.setState({ newTitle: '', newDesc: '', newAttachmentType: null, newAttachmentData: null });
   }
 
   del = async (id) => {
@@ -101,16 +130,23 @@ class Dashboard extends React.Component {
   }
 
   addEstimate = async (id, hours) => {
-    const { requests } = this.state;
+    const { requests, attachmentType, attachmentInput, imagePreview } = this.state;
     const request = requests.find(r => r.ID == id);
     const estimatedRequests = requests.filter(r => r.Status === 'estimated' || r.Status === 'approved');
     const maxPriority = estimatedRequests.length > 0 ? Math.max(...estimatedRequests.map(r => r.Priority || 0)) : 0;
     
     const success = await this.apiCall('updateRequest', {
-      data: { ...request, Status: 'estimated', EstimatedHours: parseFloat(hours), Priority: maxPriority + 1 }
+      data: { 
+        ...request, 
+        Status: 'estimated', 
+        EstimatedHours: parseFloat(hours), 
+        Priority: maxPriority + 1,
+        AttachmentType: attachmentType,
+        AttachmentData: attachmentType === 'pdf' ? attachmentInput : (attachmentType === 'image' ? imagePreview : null)
+      }
     });
     
-    if (success) this.setState({ editingEstimate: null, estimateInput: '' });
+    if (success) this.setState({ editingEstimate: null, estimateInput: '', attachmentType: null, attachmentInput: '', imagePreview: null });
   }
 
   approveRequest = async (id) => {
@@ -146,6 +182,35 @@ class Dashboard extends React.Component {
     });
   }
 
+  updatePrioritizedEstimate = async (id, newHours) => {
+    const { requests } = this.state;
+    const request = requests.find(r => r.ID == id);
+    const success = await this.apiCall('updateRequest', {
+      data: { ...request, EstimatedHours: parseFloat(newHours) }
+    });
+    if (success) this.setState({ editingPrioritizedEstimate: null, prioritizedEstimateInput: '' });
+  }
+
+  addComment = async (id) => {
+    const { requests, commentInput, commentAuthor } = this.state;
+    if (!commentInput.trim()) return;
+    
+    const request = requests.find(r => r.ID == id);
+    const existingComments = request?.Comments || [];
+    const newComment = {
+      id: Date.now(),
+      author: commentAuthor,
+      text: commentInput,
+      timestamp: new Date().toLocaleString()
+    };
+    
+    const success = await this.apiCall('updateRequest', {
+      data: { ...request, Comments: [...existingComments, newComment] }
+    });
+    
+    if (success) this.setState({ commentInput: '', commentingOn: null });
+  }
+
   movePriority = async (id, direction) => {
     const { requests } = this.state;
     const estimatedOnly = requests.filter(r => r.Status === 'estimated').sort((a, b) => a.Priority - b.Priority);
@@ -165,8 +230,90 @@ class Dashboard extends React.Component {
     }
   }
 
+  renderComments = (request) => {
+    const { commentingOn, commentInput, commentAuthor } = this.state;
+    const comments = request.Comments || [];
+    
+    return (
+      <div style={{marginTop:'12px'}}>
+        {comments.length > 0 && (
+          <div style={{marginBottom:'12px'}}>
+            {comments.map(comment => (
+              <div key={comment.id} style={{padding:'10px',background:'#f3f4f6',borderRadius:'6px',marginBottom:'8px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+                  <span style={{fontSize:'12px',fontWeight:'600',color:'#007299'}}>{comment.author}</span>
+                  <span style={{fontSize:'11px',color:'#717271'}}>{comment.timestamp}</span>
+                </div>
+                <p style={{fontSize:'13px',color:'#003e51',margin:0}}>{comment.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {commentingOn === request.ID ? (
+          <div style={{border:'2px solid #e5e7eb',borderRadius:'8px',padding:'12px',background:'#f9fafb'}}>
+            <div style={{marginBottom:'8px'}}>
+              <label style={{fontSize:'13px',fontWeight:'600',color:'#003e51',marginRight:'8px'}}>Posting as:</label>
+              <select value={commentAuthor} onChange={(e) => this.setState({commentAuthor: e.target.value})} style={{padding:'4px 8px',border:'1px solid #e5e7eb',borderRadius:'4px',fontSize:'13px'}}>
+                <option value="KPCS">KPCS</option>
+                <option value="Engineering Services">Engineering Services</option>
+              </select>
+            </div>
+            <textarea 
+              placeholder="Add a comment or question..."
+              value={commentInput}
+              onChange={(e) => this.setState({commentInput: e.target.value})}
+              rows={2}
+              style={{width:'100%',padding:'8px',border:'1px solid #e5e7eb',borderRadius:'4px',fontSize:'13px',marginBottom:'8px',boxSizing:'border-box',fontFamily:'inherit'}}
+              autoFocus
+            />
+            <div style={{display:'flex',gap:'8px'}}>
+              <button onClick={() => this.addComment(request.ID)} disabled={!commentInput.trim()} style={{padding:'6px 12px',background:!commentInput.trim()?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'4px',cursor:!commentInput.trim()?'not-allowed':'pointer',fontSize:'12px'}}>
+                Post Comment
+              </button>
+              <button onClick={() => this.setState({commentingOn: null, commentInput: ''})} style={{padding:'6px 12px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => this.setState({commentingOn: request.ID})} style={{padding:'6px 12px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+            💬 Add Comment {comments.length > 0 && `(${comments.length})`}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  renderAttachments = (request) => {
+    return (
+      <div style={{display:'flex',gap:'8px',marginTop:'8px',flexWrap:'wrap'}}>
+        {request.SubmitterAttachmentType === 'pdf' && request.SubmitterAttachmentData && (
+          <a href={request.SubmitterAttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#e6f4ea',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+            📄 Submitter PDF
+          </a>
+        )}
+        {request.SubmitterAttachmentType === 'image' && request.SubmitterAttachmentData && (
+          <a href={request.SubmitterAttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#e6f4ea',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+            🖼️ Submitter Image
+          </a>
+        )}
+        {request.AttachmentType === 'pdf' && request.AttachmentData && (
+          <a href={request.AttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#dbeafe',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+            📄 Estimate PDF
+          </a>
+        )}
+        {request.AttachmentType === 'image' && request.AttachmentData && (
+          <a href={request.AttachmentData} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#dbeafe',color:'#007299',borderRadius:'4px',fontSize:'11px',textDecoration:'none',display:'inline-block'}}>
+            🖼️ Estimate Image
+          </a>
+        )}
+      </div>
+    );
+  }
+
   render() {
-    const { requests, loading, syncing, showHistory, showArchived, monthlyHistory, currentMonth, deleteConfirmId, editingEstimate, estimateInput, editingCompletionDate, completionDateInput } = this.state;
+    const { requests, loading, syncing, showHistory, showArchived, monthlyHistory, currentMonth, deleteConfirmId, editingEstimate, estimateInput, attachmentType, imagePreview, editingCompletionDate, completionDateInput, editingPrioritizedEstimate, prioritizedEstimateInput, newAttachmentType, newAttachmentData } = this.state;
 
     const approvedHours = requests
       .filter(r => r.ApprovedMonth === currentMonth && (r.Status === 'approved' || r.Status === 'finished' || r.Status === 'archived'))
@@ -191,7 +338,7 @@ class Dashboard extends React.Component {
         <div style={{display:'flex',justifyContent:'space-between',marginBottom:'32px'}}>
           <div>
             <h1 style={{fontSize:'36px',fontWeight:'bold',color:'#003e51',marginBottom:'8px'}}>Continuous Improvement Hours Dashboard</h1>
-            <p style={{color:'#717271'}}>Track requests through workflow stages</p>
+            <p style={{color:'#717271'}}>Complete collaborative workflow with comments & attachments</p>
           </div>
           <button onClick={this.load} disabled={syncing} style={{padding:'12px 24px',background:syncing?'#717271':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:syncing?'not-allowed':'pointer',height:'fit-content'}}>
             {syncing ? 'Syncing...' : '↻ Refresh'}
@@ -246,7 +393,7 @@ class Dashboard extends React.Component {
           )}
         </div>
 
-        {/* Add New Request */}
+        {/* Add New Request with FILE ATTACHMENTS */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)',borderLeft:'4px solid #007299'}}>
           <h2 style={{fontSize:'20px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>Submit New Request</h2>
           <input 
@@ -261,14 +408,37 @@ class Dashboard extends React.Component {
             value={this.state.newDesc}
             onChange={(e) => this.setState({newDesc: e.target.value})}
             rows={3}
-            style={{width:'100%',padding:'12px',marginBottom:'16px',border:'2px solid #e5e7eb',borderRadius:'8px',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical'}}
+            style={{width:'100%',padding:'12px',marginBottom:'12px',border:'2px solid #e5e7eb',borderRadius:'8px',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical'}}
           />
+          
+          {/* File Attachment Section */}
+          <div style={{border:'2px solid #e5e7eb',borderRadius:'8px',padding:'16px',marginBottom:'16px'}}>
+            <div style={{fontSize:'14px',fontWeight:'600',color:'#003e51',marginBottom:'12px'}}>Attach files (optional)</div>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              <label style={{padding:'8px 16px',background:newAttachmentType==='pdf'?'#007299':'#f3f4f6',color:newAttachmentType==='pdf'?'white':'#717271',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
+                📄 PDF File
+                <input type="file" accept="application/pdf" onChange={(e) => this.handleFileUpload(e, 'pdf', 'new')} style={{display:'none'}} />
+              </label>
+              <label style={{padding:'8px 16px',background:newAttachmentType==='image'?'#007299':'#f3f4f6',color:newAttachmentType==='image'?'white':'#717271',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
+                🖼️ PNG Image
+                <input type="file" accept="image/png" onChange={(e) => this.handleFileUpload(e, 'image', 'new')} style={{display:'none'}} />
+              </label>
+              {newAttachmentType && (
+                <button onClick={() => this.setState({newAttachmentType: null, newAttachmentData: null})} style={{padding:'8px 16px',background:'#ff8300',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {newAttachmentType === 'pdf' && newAttachmentData && <div style={{marginTop:'8px',fontSize:'13px',color:'#007299'}}>✓ PDF attached</div>}
+            {newAttachmentType === 'image' && newAttachmentData && <img src={newAttachmentData} style={{marginTop:'8px',maxWidth:'200px',height:'auto',borderRadius:'8px'}} alt="Preview" />}
+          </div>
+          
           <button onClick={this.add} disabled={!this.state.newTitle||syncing} style={{padding:'12px 24px',background:!this.state.newTitle||syncing?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:!this.state.newTitle||syncing?'not-allowed':'pointer'}}>
             Submit Request
           </button>
         </div>
 
-        {/* PENDING REQUESTS */}
+        {/* PENDING REQUESTS with COMMENTS */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
           <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>⏳ Pending Estimates ({pendingRequests.length})</h2>
           {pendingRequests.length === 0 ? (
@@ -281,12 +451,8 @@ class Dashboard extends React.Component {
                     <div style={{marginBottom:'12px',padding:'12px',background:'#fff3e0',borderLeft:'3px solid #ff8300',borderRadius:'4px'}}>
                       <p style={{fontSize:'14px',color:'#003e51',marginBottom:'8px'}}>Are you sure you want to delete this request?</p>
                       <div style={{display:'flex',gap:'8px'}}>
-                        <button onClick={() => this.del(r.ID)} style={{padding:'6px 12px',background:'#ff8300',color:'white',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'13px'}}>
-                          Yes, Delete
-                        </button>
-                        <button onClick={() => this.setState({deleteConfirmId:null})} style={{padding:'6px 12px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'13px'}}>
-                          Cancel
-                        </button>
+                        <button onClick={() => this.del(r.ID)} style={{padding:'6px 12px',background:'#ff8300',color:'white',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'13px'}}>Yes, Delete</button>
+                        <button onClick={() => this.setState({deleteConfirmId:null})} style={{padding:'6px 12px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'13px'}}>Cancel</button>
                       </div>
                     </div>
                   )}
@@ -295,34 +461,50 @@ class Dashboard extends React.Component {
                     <div style={{flex:1}}>
                       <h3 style={{fontSize:'16px',fontWeight:'600',color:'#003e51',marginBottom:'6px'}}>{r.Title}</h3>
                       {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px',lineHeight:'1.5'}}>{r.Description}</p>}
+                      {this.renderAttachments(r)}
                     </div>
-                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginLeft:'16px'}}>
-                      Delete
-                    </button>
+                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginLeft:'16px'}}>Delete</button>
                   </div>
                   
+                  {/* COMMENTS */}
+                  {this.renderComments(r)}
+                  
+                  {/* ESTIMATE INPUT */}
                   {editingEstimate === r.ID ? (
-                    <div style={{marginTop:'12px',display:'flex',gap:'8px'}}>
-                      <input 
-                        type="number" 
-                        step="0.5"
-                        placeholder="Hours"
-                        value={estimateInput}
-                        onChange={(e) => this.setState({estimateInput: e.target.value})}
-                        style={{width:'100px',padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px'}}
-                        autoFocus
-                      />
-                      <button onClick={() => this.addEstimate(r.ID, estimateInput)} disabled={!estimateInput} style={{padding:'8px 16px',background:!estimateInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:!estimateInput?'not-allowed':'pointer',fontSize:'13px'}}>
-                        Save
-                      </button>
-                      <button onClick={() => this.setState({editingEstimate:null,estimateInput:''})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
-                        Cancel
-                      </button>
+                    <div style={{marginTop:'12px',border:'2px solid #e5e7eb',borderRadius:'8px',padding:'12px',background:'#f9fafb'}}>
+                      <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
+                        <input 
+                          type="number" 
+                          step="0.5"
+                          placeholder="Hours"
+                          value={estimateInput}
+                          onChange={(e) => this.setState({estimateInput: e.target.value})}
+                          style={{width:'100px',padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px'}}
+                          autoFocus
+                        />
+                        <button onClick={() => this.addEstimate(r.ID, estimateInput)} disabled={!estimateInput} style={{padding:'8px 16px',background:!estimateInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:!estimateInput?'not-allowed':'pointer',fontSize:'13px'}}>Save</button>
+                        <button onClick={() => this.setState({editingEstimate:null,estimateInput:'',attachmentType:null,attachmentInput:'',imagePreview:null})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Cancel</button>
+                      </div>
+                      
+                      {/* Attachment options for estimate */}
+                      <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                        <label style={{padding:'6px 12px',background:attachmentType==='pdf'?'#007299':'#f3f4f6',color:attachmentType==='pdf'?'white':'#717271',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                          📄 PDF
+                          <input type="file" accept="application/pdf" onChange={(e) => this.handleFileUpload(e, 'pdf', 'estimate')} style={{display:'none'}} />
+                        </label>
+                        <label style={{padding:'6px 12px',background:attachmentType==='image'?'#007299':'#f3f4f6',color:attachmentType==='image'?'white':'#717271',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
+                          🖼️ PNG
+                          <input type="file" accept="image/png" onChange={(e) => this.handleFileUpload(e, 'image', 'estimate')} style={{display:'none'}} />
+                        </label>
+                        {attachmentType && (
+                          <button onClick={() => this.setState({attachmentType:null,attachmentInput:'',imagePreview:null})} style={{padding:'6px 12px',background:'#ff8300',color:'white',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>Remove</button>
+                        )}
+                      </div>
+                      {attachmentType === 'pdf' && attachmentInput && <div style={{marginTop:'8px',fontSize:'12px',color:'#007299'}}>✓ PDF attached</div>}
+                      {attachmentType === 'image' && imagePreview && <img src={imagePreview} style={{marginTop:'8px',maxWidth:'150px',height:'auto',borderRadius:'6px'}} alt="Preview" />}
                     </div>
                   ) : (
-                    <button onClick={() => this.setState({editingEstimate: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#717271',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
-                      Add Estimate
-                    </button>
+                    <button onClick={() => this.setState({editingEstimate: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#717271',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Add Estimate</button>
                   )}
                 </div>
               ))}
@@ -330,7 +512,7 @@ class Dashboard extends React.Component {
           )}
         </div>
 
-        {/* PRIORITIZED REQUESTS */}
+        {/* PRIORITIZED REQUESTS with COMMENTS & EDIT ESTIMATE */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
           <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>⚡ Prioritized Requests ({estimatedRequests.length})</h2>
           {estimatedRequests.length === 0 ? (
@@ -351,32 +533,51 @@ class Dashboard extends React.Component {
                   
                   <div style={{display:'flex',gap:'12px',alignItems:'start'}}>
                     <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
-                      <button onClick={() => this.movePriority(r.ID, 'up')} disabled={index === 0} style={{padding:'4px',background:index===0?'#f3f4f6':'#e5e7eb',border:'none',borderRadius:'4px',cursor:index===0?'not-allowed':'pointer',fontSize:'16px'}}>
-                        ▲
-                      </button>
-                      <button onClick={() => this.movePriority(r.ID, 'down')} disabled={index === estimatedRequests.length - 1} style={{padding:'4px',background:index===estimatedRequests.length-1?'#f3f4f6':'#e5e7eb',border:'none',borderRadius:'4px',cursor:index===estimatedRequests.length-1?'not-allowed':'pointer',fontSize:'16px'}}>
-                        ▼
-                      </button>
+                      <button onClick={() => this.movePriority(r.ID, 'up')} disabled={index === 0} style={{padding:'4px',background:index===0?'#f3f4f6':'#e5e7eb',border:'none',borderRadius:'4px',cursor:index===0?'not-allowed':'pointer',fontSize:'16px'}}>▲</button>
+                      <button onClick={() => this.movePriority(r.ID, 'down')} disabled={index === estimatedRequests.length - 1} style={{padding:'4px',background:index===estimatedRequests.length-1?'#f3f4f6':'#e5e7eb',border:'none',borderRadius:'4px',cursor:index===estimatedRequests.length-1?'not-allowed':'pointer',fontSize:'16px'}}>▼</button>
                     </div>
                     
                     <div style={{flex:1}}>
                       <h3 style={{fontSize:'16px',fontWeight:'600',color:'#003e51',marginBottom:'6px'}}>{r.Title}</h3>
                       {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px',lineHeight:'1.5'}}>{r.Description}</p>}
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'12px'}}>
-                        <span style={{fontSize:'14px',fontWeight:'600',color:'#003e51'}}>{r.EstimatedHours}h estimated</span>
-                        <button 
-                          onClick={() => this.approveRequest(r.ID)} 
-                          disabled={remainingHours < r.EstimatedHours}
-                          style={{padding:'8px 16px',background:remainingHours<r.EstimatedHours?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:remainingHours<r.EstimatedHours?'not-allowed':'pointer',fontSize:'13px'}}
-                        >
-                          {remainingHours < r.EstimatedHours ? 'Insufficient Budget' : 'Approve'}
-                        </button>
+                      {this.renderAttachments(r)}
+                      
+                      {/* COMMENTS */}
+                      {this.renderComments(r)}
+                      
+                      {/* EDIT ESTIMATE */}
+                      <div style={{marginTop:'12px',display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                        {editingPrioritizedEstimate === r.ID ? (
+                          <>
+                            <input 
+                              type="number" 
+                              step="0.5"
+                              placeholder="New hours"
+                              value={prioritizedEstimateInput}
+                              onChange={(e) => this.setState({prioritizedEstimateInput: e.target.value})}
+                              style={{width:'100px',padding:'6px',border:'2px solid #e5e7eb',borderRadius:'4px',fontSize:'13px'}}
+                              autoFocus
+                            />
+                            <button onClick={() => this.updatePrioritizedEstimate(r.ID, prioritizedEstimateInput)} disabled={!prioritizedEstimateInput} style={{padding:'6px 12px',background:!prioritizedEstimateInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'4px',cursor:!prioritizedEstimateInput?'not-allowed':'pointer',fontSize:'12px'}}>Update</button>
+                            <button onClick={() => this.setState({editingPrioritizedEstimate:null,prioritizedEstimateInput:''})} style={{padding:'6px 12px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{fontSize:'14px',fontWeight:'600',color:'#003e51'}}>{r.EstimatedHours}h estimated</span>
+                            <button onClick={() => this.setState({editingPrioritizedEstimate: r.ID, prioritizedEstimateInput: r.EstimatedHours})} style={{padding:'4px 10px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'11px'}}>Edit Estimate</button>
+                            <button 
+                              onClick={() => this.approveRequest(r.ID)} 
+                              disabled={remainingHours < r.EstimatedHours}
+                              style={{padding:'8px 16px',background:remainingHours<r.EstimatedHours?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:remainingHours<r.EstimatedHours?'not-allowed':'pointer',fontSize:'13px',marginLeft:'auto'}}
+                            >
+                              {remainingHours < r.EstimatedHours ? 'Insufficient Budget' : 'Approve'}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                     
-                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
-                      🗑️
-                    </button>
+                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>🗑️</button>
                   </div>
                 </div>
               ))}
@@ -393,10 +594,11 @@ class Dashboard extends React.Component {
             <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
               {approvedRequests.map(r => (
                 <div key={r.ID} style={{padding:'16px',border:'2px solid #e5e7eb',borderLeft:'4px solid #007299',borderRadius:'8px'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'start',marginBottom:'12px'}}>
-                    <div style={{flex:1}}>
-                      <h3 style={{fontSize:'16px',fontWeight:'600',color:'#003e51',marginBottom:'6px'}}>{r.Title}</h3>
-                      {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px',lineHeight:'1.5'}}>{r.Description}</p>}
+                  <div style={{marginBottom:'12px'}}>
+                    <h3 style={{fontSize:'16px',fontWeight:'600',color:'#003e51',marginBottom:'6px'}}>{r.Title}</h3>
+                    {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px',lineHeight:'1.5'}}>{r.Description}</p>}
+                    {this.renderAttachments(r)}
+                    <div style={{marginTop:'8px'}}>
                       <span style={{fontSize:'14px',fontWeight:'600',color:'#007299'}}>{r.EstimatedHours}h</span>
                       {r.EstimatedCompletionDate && <span style={{fontSize:'13px',color:'#717271',marginLeft:'12px'}}>Due: {r.EstimatedCompletionDate}</span>}
                     </div>
@@ -411,22 +613,14 @@ class Dashboard extends React.Component {
                         style={{padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px'}}
                         autoFocus
                       />
-                      <button onClick={() => this.addCompletionDate(r.ID, completionDateInput)} disabled={!completionDateInput} style={{padding:'8px 16px',background:!completionDateInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:!completionDateInput?'not-allowed':'pointer',fontSize:'13px'}}>
-                        Save
-                      </button>
-                      <button onClick={() => this.setState({editingCompletionDate:null,completionDateInput:''})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
-                        Cancel
-                      </button>
+                      <button onClick={() => this.addCompletionDate(r.ID, completionDateInput)} disabled={!completionDateInput} style={{padding:'8px 16px',background:!completionDateInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:!completionDateInput?'not-allowed':'pointer',fontSize:'13px'}}>Save</button>
+                      <button onClick={() => this.setState({editingCompletionDate:null,completionDateInput:''})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Cancel</button>
                     </div>
                   ) : !r.EstimatedCompletionDate && (
-                    <button onClick={() => this.setState({editingCompletionDate: r.ID})} style={{padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px'}}>
-                      Set Completion Date
-                    </button>
+                    <button onClick={() => this.setState({editingCompletionDate: r.ID})} style={{padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px'}}>Set Completion Date</button>
                   )}
                   
-                  <button onClick={() => this.markAsDone(r.ID)} style={{padding:'8px 16px',background:'#10b981',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
-                    Mark as Done
-                  </button>
+                  <button onClick={() => this.markAsDone(r.ID)} style={{padding:'8px 16px',background:'#10b981',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Mark as Done</button>
                 </div>
               ))}
             </div>
@@ -446,14 +640,13 @@ class Dashboard extends React.Component {
                     <div style={{flex:1}}>
                       <h3 style={{fontSize:'16px',fontWeight:'600',color:'#003e51',marginBottom:'6px'}}>{r.Title}</h3>
                       {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px',lineHeight:'1.5'}}>{r.Description}</p>}
-                      <div style={{fontSize:'13px',color:'#717271'}}>
+                      {this.renderAttachments(r)}
+                      <div style={{fontSize:'13px',color:'#717271',marginTop:'8px'}}>
                         <span>{r.EstimatedHours}h</span>
                         {r.CompletedDate && <span style={{marginLeft:'12px'}}>Completed: {r.CompletedDate}</span>}
                       </div>
                     </div>
-                    <button onClick={() => this.archiveRequest(r.ID)} style={{padding:'8px 16px',background:'#717271',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginLeft:'16px'}}>
-                      Accept & Archive
-                    </button>
+                    <button onClick={() => this.archiveRequest(r.ID)} style={{padding:'8px 16px',background:'#717271',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginLeft:'16px'}}>Accept & Archive</button>
                   </div>
                 </div>
               ))}
@@ -480,11 +673,10 @@ class Dashboard extends React.Component {
                       <div style={{flex:1}}>
                         <h3 style={{fontSize:'16px',fontWeight:'600',color:'#003e51',marginBottom:'6px'}}>{r.Title}</h3>
                         {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px'}}>{r.Description}</p>}
+                        {this.renderAttachments(r)}
                         <span style={{fontSize:'13px',color:'#717271'}}>{r.EstimatedHours}h • Completed: {r.CompletedDate}</span>
                       </div>
-                      <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>
-                        Delete
-                      </button>
+                      <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Delete</button>
                     </div>
                     {deleteConfirmId === r.ID && (
                       <div style={{marginTop:'12px',padding:'12px',background:'#fff3e0',borderLeft:'3px solid #ff8300',borderRadius:'4px'}}>
@@ -502,13 +694,15 @@ class Dashboard extends React.Component {
           )}
         </div>
 
-        <div style={{marginTop:'24px',padding:'20px',background:'#d1fae5',borderRadius:'8px',borderLeft:'4px solid #10b981'}}>
-          <p style={{color:'#065f46',fontSize:'14px',fontWeight:'600',marginBottom:'8px'}}>✅ Workflow Stages Added!</p>
+        <div style={{marginTop:'24px',padding:'20px',background:'#dcfce7',borderRadius:'8px',borderLeft:'4px solid #10b981'}}>
+          <p style={{color:'#065f46',fontSize:'14px',fontWeight:'600',marginBottom:'8px'}}>🎉 Complete Dashboard!</p>
           <p style={{color:'#059669',fontSize:'14px',lineHeight:'1.6'}}>
-            • Pending → Estimated → Approved → Finished → Archived<br/>
-            • Add estimates and prioritize requests<br/>
-            • Track completion dates<br/>
-            • Next: Comments & Attachments
+            ✅ Budget tracking with monthly history<br/>
+            ✅ Complete workflow (Pending → Estimated → Approved → Finished → Archived)<br/>
+            ✅ Comments system (KPCS ↔ Engineering Services)<br/>
+            ✅ File attachments (PDF & PNG) for submitters and coders<br/>
+            ✅ Priority ordering & estimate editing<br/>
+            ✅ Real-time collaboration via Google Sheets
           </p>
         </div>
 
