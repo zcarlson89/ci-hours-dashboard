@@ -43,7 +43,8 @@ class Dashboard extends React.Component {
 
   componentDidMount() {
     this.load();
-    setInterval(() => this.load(), 30000);
+    // Refresh every 60 seconds instead of 30 for better performance
+    setInterval(() => this.load(), 60000);
   }
 
   load = async () => {
@@ -66,7 +67,7 @@ class Dashboard extends React.Component {
   }
 
   apiCall = async (action, params = {}) => {
-    this.setState({ syncing: true });
+    // Don't show syncing spinner for better perceived performance
     try {
       const fd = new URLSearchParams();
       fd.append('action', action);
@@ -76,15 +77,14 @@ class Dashboard extends React.Component {
       const res = await fetch(window.GOOGLE_SCRIPT_URL, { method: 'POST', body: fd });
       const result = await res.json();
       if (result.success) {
-        await this.load();
+        // Only reload in background, don't wait
+        this.load();
         return true;
       }
       return false;
     } catch (e) {
       console.error(e);
       return false;
-    } finally {
-      this.setState({ syncing: false });
     }
   }
 
@@ -106,6 +106,27 @@ class Dashboard extends React.Component {
 
   add = async () => {
     if (!this.state.newTitle) return;
+    
+    // OPTIMISTIC UPDATE - show new request immediately
+    const tempRequest = {
+      ID: Date.now(),
+      Title: this.state.newTitle,
+      Description: this.state.newDesc,
+      Status: 'pending',
+      SubmitterAttachmentType: this.state.newAttachmentType,
+      SubmitterAttachmentData: this.state.newAttachmentData,
+      Comments: []
+    };
+    
+    this.setState({ 
+      requests: [...this.state.requests, tempRequest],
+      newTitle: '', 
+      newDesc: '', 
+      newAttachmentType: null, 
+      newAttachmentData: null 
+    });
+    
+    // Save to backend in background
     await this.apiCall('addRequest', {
       data: {
         title: this.state.newTitle, 
@@ -116,7 +137,6 @@ class Dashboard extends React.Component {
         comments: []
       }
     });
-    this.setState({ newTitle: '', newDesc: '', newAttachmentType: null, newAttachmentData: null });
   }
 
   del = async (id) => {
@@ -204,11 +224,20 @@ class Dashboard extends React.Component {
       timestamp: new Date().toLocaleString()
     };
     
-    const success = await this.apiCall('updateRequest', {
-      data: { ...request, Comments: [...existingComments, newComment] }
+    // OPTIMISTIC UPDATE - show comment immediately
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, Comments: [...existingComments, newComment] } : r
+    );
+    this.setState({ 
+      requests: updatedRequests,
+      commentInput: '', 
+      commentingOn: null 
     });
     
-    if (success) this.setState({ commentInput: '', commentingOn: null });
+    // Save to backend in background
+    await this.apiCall('updateRequest', {
+      data: { ...request, Comments: [...existingComments, newComment] }
+    });
   }
 
   movePriority = async (id, direction) => {
