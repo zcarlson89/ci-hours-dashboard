@@ -532,7 +532,7 @@ class Dashboard extends React.Component {
   }
 
   render() {
-    const { requests, loading, syncing, showHistory, showArchived, monthlyHistory, currentMonth, deleteConfirmId, editingEstimate, estimateInput, attachmentType, imagePreview, editingCompletionDate, completionDateInput, editingPrioritizedEstimate, prioritizedEstimateInput, newAttachmentType, newAttachmentData } = this.state;
+    const { requests, loading, syncing, showHistory, showArchived, monthlyHistory, currentMonth, deleteConfirmId, editingEstimate, estimateInput, attachmentType, imagePreview, editingCompletionDate, completionDateInput, editingPrioritizedEstimate, prioritizedEstimateInput, editingPreviewUrl, previewUrlInput, newAttachmentType, newAttachmentData } = this.state;
 
     const approvedHours = requests
       .filter(r => r.ApprovedMonth === currentMonth && (r.Status === 'approved' || r.Status === 'finished' || r.Status === 'archived'))
