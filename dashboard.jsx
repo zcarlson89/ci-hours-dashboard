@@ -19,6 +19,8 @@ class Dashboard extends React.Component {
     completionDateInput: '',
     editingPrioritizedEstimate: null,
     prioritizedEstimateInput: '',
+    editingPreviewUrl: null,
+    previewUrlInput: '',
     commentingOn: null,
     commentInput: '',
     commentAuthor: 'KPCS',
@@ -249,15 +251,29 @@ class Dashboard extends React.Component {
     const { requests, currentMonth } = this.state;
     const request = requests.find(r => r.ID == id);
     
-    // OPTIMISTIC UPDATE - show change immediately
+    // OPTIMISTIC UPDATE - show change immediately, PRESERVE Comments and Attachments
     const updatedRequests = requests.map(r => 
-      r.ID == id ? { ...r, Status: 'approved', ApprovedMonth: currentMonth } : r
+      r.ID == id ? { 
+        ...r, 
+        Status: 'approved', 
+        ApprovedMonth: currentMonth,
+        // Keep these fields:
+        Comments: r.Comments || [],
+        SubmitterAttachmentType: r.SubmitterAttachmentType,
+        SubmitterAttachmentData: r.SubmitterAttachmentData,
+        AttachmentType: r.AttachmentType,
+        AttachmentData: r.AttachmentData
+      } : r
     );
     this.setState({ requests: updatedRequests });
     
-    // Save to backend
+    // Save to backend with all fields preserved
     await this.apiCall('updateRequest', {
-      data: { ...request, Status: 'approved', ApprovedMonth: currentMonth }
+      data: { 
+        ...request, 
+        Status: 'approved', 
+        ApprovedMonth: currentMonth 
+      }
     });
   }
 
@@ -278,6 +294,26 @@ class Dashboard extends React.Component {
     // Save to backend
     await this.apiCall('updateRequest', {
       data: { ...request, EstimatedCompletionDate: date }
+    });
+  }
+
+  addPreviewUrl = async (id, url) => {
+    const { requests } = this.state;
+    const request = requests.find(r => r.ID == id);
+    
+    // OPTIMISTIC UPDATE
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, PreviewUrl: url } : r
+    );
+    this.setState({ 
+      requests: updatedRequests,
+      editingPreviewUrl: null, 
+      previewUrlInput: '' 
+    });
+    
+    // Save to backend
+    await this.apiCall('updateRequest', {
+      data: { ...request, PreviewUrl: url }
     });
   }
 
@@ -316,10 +352,21 @@ class Dashboard extends React.Component {
   updatePrioritizedEstimate = async (id, newHours) => {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
-    const success = await this.apiCall('updateRequest', {
+    
+    // OPTIMISTIC UPDATE - show immediately
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, EstimatedHours: parseFloat(newHours) } : r
+    );
+    this.setState({ 
+      requests: updatedRequests,
+      editingPrioritizedEstimate: null, 
+      prioritizedEstimateInput: '' 
+    });
+    
+    // Save to backend
+    await this.apiCall('updateRequest', {
       data: { ...request, EstimatedHours: parseFloat(newHours) }
     });
-    if (success) this.setState({ editingPrioritizedEstimate: null, prioritizedEstimateInput: '' });
   }
 
   addComment = async (id) => {
@@ -773,11 +820,20 @@ class Dashboard extends React.Component {
                     <div style={{marginTop:'8px'}}>
                       <span style={{fontSize:'14px',fontWeight:'600',color:'#007299'}}>{r.EstimatedHours}h</span>
                       {r.EstimatedCompletionDate && <span style={{fontSize:'13px',color:'#717271',marginLeft:'12px'}}>Due: {r.EstimatedCompletionDate}</span>}
+                      {r.PreviewUrl && (
+                        <a href={r.PreviewUrl} target="_blank" rel="noopener noreferrer" style={{marginLeft:'12px',fontSize:'13px',color:'#007299',textDecoration:'underline'}}>
+                          Preview Channel
+                        </a>
+                      )}
                     </div>
                   </div>
                   
+                  {/* COMMENTS */}
+                  {this.renderComments(r)}
+                  
+                  {/* COMPLETION DATE */}
                   {editingCompletionDate === r.ID ? (
-                    <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+                    <div style={{display:'flex',gap:'8px',marginTop:'12px',marginBottom:'12px'}}>
                       <input 
                         type="date"
                         value={completionDateInput}
@@ -789,10 +845,28 @@ class Dashboard extends React.Component {
                       <button onClick={() => this.setState({editingCompletionDate:null,completionDateInput:''})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Cancel</button>
                     </div>
                   ) : !r.EstimatedCompletionDate && (
-                    <button onClick={() => this.setState({editingCompletionDate: r.ID})} style={{padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px'}}>Set Completion Date</button>
+                    <button onClick={() => this.setState({editingCompletionDate: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px'}}>Set Completion Date</button>
                   )}
                   
-                  <button onClick={() => this.markAsDone(r.ID)} style={{padding:'8px 16px',background:'#10b981',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Mark as Done</button>
+                  {/* PREVIEW URL */}
+                  {editingPreviewUrl === r.ID ? (
+                    <div style={{display:'flex',gap:'8px',marginTop:'12px',marginBottom:'12px'}}>
+                      <input 
+                        type="url"
+                        placeholder="https://preview.example.com"
+                        value={previewUrlInput}
+                        onChange={(e) => this.setState({previewUrlInput: e.target.value})}
+                        style={{flex:1,padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px'}}
+                        autoFocus
+                      />
+                      <button onClick={() => this.addPreviewUrl(r.ID, previewUrlInput)} disabled={!previewUrlInput} style={{padding:'8px 16px',background:!previewUrlInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:!previewUrlInput?'not-allowed':'pointer',fontSize:'13px'}}>Save</button>
+                      <button onClick={() => this.setState({editingPreviewUrl:null,previewUrlInput:''})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Cancel</button>
+                    </div>
+                  ) : !r.PreviewUrl && (
+                    <button onClick={() => this.setState({editingPreviewUrl: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px',marginRight:'8px'}}>Add Preview URL</button>
+                  )}
+                  
+                  <button onClick={() => this.markAsDone(r.ID)} style={{marginTop:'12px',padding:'8px 16px',background:'#10b981',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Mark as Done</button>
                 </div>
               ))}
             </div>
