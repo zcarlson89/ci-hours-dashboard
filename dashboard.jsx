@@ -54,12 +54,33 @@ class Dashboard extends React.Component {
       const data = await res.json();
       if (data.success) {
         // Parse comments properly - they come as JSON strings from Google Sheets
-        const requestsWithParsedComments = (data.requests || []).map(req => ({
-          ...req,
-          Comments: typeof req.Comments === 'string' ? 
-            (req.Comments ? JSON.parse(req.Comments) : []) : 
-            (req.Comments || [])
-        }));
+        const requestsWithParsedComments = (data.requests || []).map(req => {
+          let parsedComments = [];
+          
+          if (req.Comments) {
+            if (typeof req.Comments === 'string') {
+              try {
+                parsedComments = JSON.parse(req.Comments);
+                // If it's still a string after parsing (double-encoded), parse again
+                if (typeof parsedComments === 'string') {
+                  parsedComments = JSON.parse(parsedComments);
+                }
+              } catch (e) {
+                console.error('Error parsing comments for request', req.ID, ':', e);
+                parsedComments = [];
+              }
+            } else if (Array.isArray(req.Comments)) {
+              parsedComments = req.Comments;
+            }
+          }
+          
+          return {
+            ...req,
+            Comments: parsedComments
+          };
+        });
+        
+        console.log('Loaded requests with comments:', requestsWithParsedComments.filter(r => r.Comments && r.Comments.length > 0));
         
         this.setState({ 
           requests: requestsWithParsedComments, 
@@ -68,7 +89,7 @@ class Dashboard extends React.Component {
         });
       }
     } catch (e) {
-      console.error(e);
+      console.error('Load error:', e);
     } finally {
       this.setState({ syncing: false, loading: false });
     }
@@ -243,10 +264,21 @@ class Dashboard extends React.Component {
   addCompletionDate = async (id, date) => {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
-    const success = await this.apiCall('updateRequest', {
+    
+    // OPTIMISTIC UPDATE - show immediately
+    const updatedRequests = requests.map(r => 
+      r.ID == id ? { ...r, EstimatedCompletionDate: date } : r
+    );
+    this.setState({ 
+      requests: updatedRequests,
+      editingCompletionDate: null, 
+      completionDateInput: '' 
+    });
+    
+    // Save to backend
+    await this.apiCall('updateRequest', {
       data: { ...request, EstimatedCompletionDate: date }
     });
-    if (success) this.setState({ editingCompletionDate: null, completionDateInput: '' });
   }
 
   markAsDone = async (id) => {
@@ -303,9 +335,15 @@ class Dashboard extends React.Component {
       timestamp: new Date().toLocaleString()
     };
     
+    const updatedComments = [...existingComments, newComment];
+    console.log('Adding comment to request', id);
+    console.log('Existing comments:', existingComments);
+    console.log('New comment:', newComment);
+    console.log('Updated comments array:', updatedComments);
+    
     // OPTIMISTIC UPDATE - show comment immediately
     const updatedRequests = requests.map(r => 
-      r.ID == id ? { ...r, Comments: [...existingComments, newComment] } : r
+      r.ID == id ? { ...r, Comments: updatedComments } : r
     );
     this.setState({ 
       requests: updatedRequests,
@@ -314,8 +352,11 @@ class Dashboard extends React.Component {
     });
     
     // Save to backend in background
+    const dataToSave = { ...request, Comments: updatedComments };
+    console.log('Saving to backend, Comments field:', dataToSave.Comments);
+    
     await this.apiCall('updateRequest', {
-      data: { ...request, Comments: [...existingComments, newComment] }
+      data: dataToSave
     });
   }
 
@@ -571,7 +612,7 @@ class Dashboard extends React.Component {
 
         {/* PENDING REQUESTS with COMMENTS */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
-          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>⏳ Pending Estimates ({pendingRequests.length})</h2>
+          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>Pending Estimates ({pendingRequests.length})</h2>
           {pendingRequests.length === 0 ? (
             <p style={{textAlign:'center',padding:'40px',color:'#717271'}}>No pending requests</p>
           ) : (
@@ -618,14 +659,14 @@ class Dashboard extends React.Component {
                       </div>
                       
                       {/* Attachment options for estimate */}
-                      <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                      <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}}>
                         <label style={{padding:'6px 12px',background:attachmentType==='pdf'?'#007299':'#f3f4f6',color:attachmentType==='pdf'?'white':'#717271',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
-                          📄 PDF
-                          <input type="file" accept="application/pdf" onChange={(e) => this.handleFileUpload(e, 'pdf', 'estimate')} style={{display:'none'}} />
+                          📄 PDF File
+                          <input type="file" accept=".pdf,application/pdf" onChange={(e) => this.handleFileUpload(e, 'pdf', 'estimate')} style={{display:'none'}} />
                         </label>
                         <label style={{padding:'6px 12px',background:attachmentType==='image'?'#007299':'#f3f4f6',color:attachmentType==='image'?'white':'#717271',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
-                          🖼️ PNG
-                          <input type="file" accept="image/png" onChange={(e) => this.handleFileUpload(e, 'image', 'estimate')} style={{display:'none'}} />
+                          🖼️ PNG Image
+                          <input type="file" accept=".png,image/png" onChange={(e) => this.handleFileUpload(e, 'image', 'estimate')} style={{display:'none'}} />
                         </label>
                         {attachmentType && (
                           <button onClick={() => this.setState({attachmentType:null,attachmentInput:'',imagePreview:null})} style={{padding:'6px 12px',background:'#ff8300',color:'white',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>Remove</button>
@@ -645,7 +686,7 @@ class Dashboard extends React.Component {
 
         {/* PRIORITIZED REQUESTS with COMMENTS & EDIT ESTIMATE */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
-          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>⚡ Prioritized Requests ({estimatedRequests.length})</h2>
+          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>Prioritized Requests ({estimatedRequests.length})</h2>
           {estimatedRequests.length === 0 ? (
             <p style={{textAlign:'center',padding:'40px',color:'#717271'}}>No estimated requests yet</p>
           ) : (
@@ -718,7 +759,7 @@ class Dashboard extends React.Component {
 
         {/* APPROVED REQUESTS */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
-          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>✅ Approved Requests ({approvedRequests.length})</h2>
+          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>Approved Requests ({approvedRequests.length})</h2>
           {approvedRequests.length === 0 ? (
             <p style={{textAlign:'center',padding:'40px',color:'#717271'}}>No approved requests</p>
           ) : (
@@ -760,7 +801,7 @@ class Dashboard extends React.Component {
 
         {/* FINISHED REQUESTS */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',marginBottom:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
-          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>✔️ Finished Requests ({finishedRequests.length})</h2>
+          <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51',marginBottom:'16px'}}>Finished Requests ({finishedRequests.length})</h2>
           {finishedRequests.length === 0 ? (
             <p style={{textAlign:'center',padding:'40px',color:'#717271'}}>No finished requests</p>
           ) : (
@@ -788,7 +829,7 @@ class Dashboard extends React.Component {
         {/* ARCHIVED REQUESTS */}
         <div style={{background:'white',borderRadius:'12px',padding:'24px',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-            <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51'}}>📦 Archived Requests ({archivedRequests.length})</h2>
+            <h2 style={{fontSize:'22px',fontWeight:'600',color:'#003e51'}}>Archived Requests ({archivedRequests.length})</h2>
             <button onClick={() => this.setState({showArchived: !showArchived})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px'}}>
               {showArchived ? 'Hide' : 'Show'} Archived
             </button>
