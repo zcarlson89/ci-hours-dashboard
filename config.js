@@ -1,6 +1,6 @@
 // Google Sheets Configuration
 // Replace this with your Google Apps Script Web App URL
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxfzbi-uikstOMCQPPoAGs4LebaJBGQB41OuFHGcPJKp_TG2knLx5m9MAQQbga-s16-tA/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOoJW6VoVMgbC7tP5VWPlNJUEbk_B6Fa5gKUeOz9HQjLGFBfrH9KObjep5LibdR1NcNg/exec';
 
 // This will be provided after you deploy your Google Apps Script
 // It will look like: https://script.google.com/macros/s/AKfycby.../exec
