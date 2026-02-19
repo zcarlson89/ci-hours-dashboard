@@ -321,13 +321,24 @@ class Dashboard extends React.Component {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
     
-    // OPTIMISTIC UPDATE
+    // OPTIMISTIC UPDATE - preserve all fields including PreviewUrl
     const updatedRequests = requests.map(r => 
-      r.ID == id ? { ...r, Status: 'finished', CompletedDate: new Date().toLocaleDateString() } : r
+      r.ID == id ? { 
+        ...r, 
+        Status: 'finished', 
+        CompletedDate: new Date().toLocaleDateString(),
+        // Preserve these fields:
+        PreviewUrl: r.PreviewUrl,
+        Comments: r.Comments || [],
+        SubmitterAttachmentType: r.SubmitterAttachmentType,
+        SubmitterAttachmentData: r.SubmitterAttachmentData,
+        AttachmentType: r.AttachmentType,
+        AttachmentData: r.AttachmentData
+      } : r
     );
     this.setState({ requests: updatedRequests });
     
-    // Save to backend
+    // Save to backend with all fields preserved
     await this.apiCall('updateRequest', {
       data: { ...request, Status: 'finished', CompletedDate: new Date().toLocaleDateString() }
     });
@@ -866,7 +877,7 @@ class Dashboard extends React.Component {
                     <button onClick={() => this.setState({editingPreviewUrl: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px',marginRight:'8px'}}>Add Preview URL</button>
                   )}
                   
-                  <button onClick={() => this.markAsDone(r.ID)} style={{marginTop:'12px',padding:'8px 16px',background:'#10b981',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Mark as Done</button>
+                  <button onClick={() => this.markAsDone(r.ID)} style={{marginTop:'12px',padding:'8px 16px',background:'#007299',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',fontWeight:'600'}}>Mark as Done</button>
                 </div>
               ))}
             </div>
@@ -890,6 +901,11 @@ class Dashboard extends React.Component {
                       <div style={{fontSize:'13px',color:'#717271',marginTop:'8px'}}>
                         <span>{r.EstimatedHours}h</span>
                         {r.CompletedDate && <span style={{marginLeft:'12px'}}>Completed: {r.CompletedDate}</span>}
+                        {r.PreviewUrl && (
+                          <a href={r.PreviewUrl} target="_blank" rel="noopener noreferrer" style={{marginLeft:'12px',color:'#007299',textDecoration:'underline'}}>
+                            Preview Channel
+                          </a>
+                        )}
                       </div>
                     </div>
                     <button onClick={() => this.archiveRequest(r.ID)} style={{padding:'8px 16px',background:'#717271',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginLeft:'16px'}}>Accept & Archive</button>
