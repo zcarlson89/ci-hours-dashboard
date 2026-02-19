@@ -682,7 +682,7 @@ class Dashboard extends React.Component {
                       {r.Description && <p style={{fontSize:'14px',color:'#717271',marginBottom:'8px',lineHeight:'1.5'}}>{r.Description}</p>}
                       {this.renderAttachments(r)}
                     </div>
-                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginLeft:'16px'}}>Delete</button>
+                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fff3e0',color:'#ff8300',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',fontWeight:'600',marginLeft:'16px'}}>Delete</button>
                   </div>
                   
                   {/* COMMENTS */}
@@ -796,7 +796,7 @@ class Dashboard extends React.Component {
                       </div>
                     </div>
                     
-                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>🗑️</button>
+                    <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fff3e0',color:'#ff8300',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',fontWeight:'600'}}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -922,7 +922,7 @@ class Dashboard extends React.Component {
                         {this.renderAttachments(r)}
                         <span style={{fontSize:'13px',color:'#717271'}}>{r.EstimatedHours}h • Completed: {r.CompletedDate}</span>
                       </div>
-                      <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Delete</button>
+                      <button onClick={() => this.setState({deleteConfirmId:r.ID})} style={{padding:'8px 16px',background:'#fff3e0',color:'#ff8300',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',fontWeight:'600'}}>Delete</button>
                     </div>
                     {deleteConfirmId === r.ID && (
                       <div style={{marginTop:'12px',padding:'12px',background:'#fff3e0',borderLeft:'3px solid #ff8300',borderRadius:'4px'}}>
