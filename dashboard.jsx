@@ -105,16 +105,35 @@ class Dashboard extends React.Component {
       Object.keys(params).forEach(key => {
         fd.append(key, typeof params[key] === 'object' ? JSON.stringify(params[key]) : params[key]);
       });
+      
+      console.log('API Call:', action, 'with params:', params);
+      
       const res = await fetch(window.GOOGLE_SCRIPT_URL, { method: 'POST', body: fd });
+      
+      console.log('Response status:', res.status);
+      console.log('Response ok:', res.ok);
+      
+      if (!res.ok) {
+        console.error('API call failed with status:', res.status);
+        alert('Save failed! Check console for details. Status: ' + res.status);
+        return false;
+      }
+      
       const result = await res.json();
+      console.log('API result:', result);
+      
       if (result.success) {
         // Only reload in background, don't wait
         this.load();
         return true;
+      } else {
+        console.error('API returned success=false:', result);
+        alert('Save failed! Error: ' + (result.error || 'Unknown error'));
+        return false;
       }
-      return false;
     } catch (e) {
-      console.error(e);
+      console.error('API call exception:', e);
+      alert('Save failed! Exception: ' + e.message + '\n\nCheck that your Google Apps Script is deployed correctly.');
       return false;
     }
   }
