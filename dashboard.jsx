@@ -348,13 +348,23 @@ class Dashboard extends React.Component {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
     
-    // OPTIMISTIC UPDATE
+    // OPTIMISTIC UPDATE - preserve all fields
     const updatedRequests = requests.map(r => 
-      r.ID == id ? { ...r, Status: 'archived' } : r
+      r.ID == id ? { 
+        ...r, 
+        Status: 'archived',
+        // Preserve these fields:
+        PreviewUrl: r.PreviewUrl,
+        Comments: r.Comments || [],
+        SubmitterAttachmentType: r.SubmitterAttachmentType,
+        SubmitterAttachmentData: r.SubmitterAttachmentData,
+        AttachmentType: r.AttachmentType,
+        AttachmentData: r.AttachmentData
+      } : r
     );
     this.setState({ requests: updatedRequests });
     
-    // Save to backend
+    // Save to backend with all fields preserved
     await this.apiCall('updateRequest', {
       data: { ...request, Status: 'archived' }
     });
@@ -460,57 +470,25 @@ class Dashboard extends React.Component {
     }
   }
 
-  renderComments = (request) => {
-    const { commentingOn, commentInput, commentAuthor } = this.state;
-    const comments = request.Comments || [];
+  renderNotes = (request) => {
+    const { requests } = this.state;
     
     return (
       <div style={{marginTop:'12px'}}>
-        {comments.length > 0 && (
-          <div style={{marginBottom:'12px'}}>
-            {comments.map(comment => (
-              <div key={comment.id} style={{padding:'10px',background:'#f3f4f6',borderRadius:'6px',marginBottom:'8px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
-                  <span style={{fontSize:'12px',fontWeight:'600',color:'#007299'}}>{comment.author}</span>
-                  <span style={{fontSize:'11px',color:'#717271'}}>{comment.timestamp}</span>
-                </div>
-                <p style={{fontSize:'13px',color:'#003e51',margin:0}}>{comment.text}</p>
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {commentingOn === request.ID ? (
-          <div style={{border:'2px solid #e5e7eb',borderRadius:'8px',padding:'12px',background:'#f9fafb'}}>
-            <div style={{marginBottom:'8px'}}>
-              <label style={{fontSize:'13px',fontWeight:'600',color:'#003e51',marginRight:'8px'}}>Posting as:</label>
-              <select value={commentAuthor} onChange={(e) => this.setState({commentAuthor: e.target.value})} style={{padding:'4px 8px',border:'1px solid #e5e7eb',borderRadius:'4px',fontSize:'13px'}}>
-                <option value="KPCS">KPCS</option>
-                <option value="Engineering Services">Engineering Services</option>
-              </select>
-            </div>
-            <textarea 
-              placeholder="Add a comment or question..."
-              value={commentInput}
-              onChange={(e) => this.setState({commentInput: e.target.value})}
-              rows={2}
-              style={{width:'100%',padding:'8px',border:'1px solid #e5e7eb',borderRadius:'4px',fontSize:'13px',marginBottom:'8px',boxSizing:'border-box',fontFamily:'inherit'}}
-              autoFocus
-            />
-            <div style={{display:'flex',gap:'8px'}}>
-              <button onClick={() => this.addComment(request.ID)} disabled={!commentInput.trim()} style={{padding:'6px 12px',background:!commentInput.trim()?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'4px',cursor:!commentInput.trim()?'not-allowed':'pointer',fontSize:'12px'}}>
-                Post Comment
-              </button>
-              <button onClick={() => this.setState({commentingOn: null, commentInput: ''})} style={{padding:'6px 12px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => this.setState({commentingOn: request.ID})} style={{padding:'6px 12px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'4px',cursor:'pointer',fontSize:'12px'}}>
-            💬 Add Comment {comments.length > 0 && `(${comments.length})`}
-          </button>
-        )}
+        <label style={{fontSize:'13px',fontWeight:'600',color:'#003e51',display:'block',marginBottom:'6px'}}>Notes / Comments:</label>
+        <textarea 
+          placeholder="Add notes or comments about this request..."
+          value={request.Notes || ''}
+          onChange={(e) => {
+            const updatedRequests = requests.map(r => 
+              r.ID == request.ID ? { ...r, Notes: e.target.value } : r
+            );
+            this.setState({ requests: updatedRequests });
+          }}
+          onBlur={() => this.apiCall('updateRequest', { data: requests.find(r => r.ID == request.ID) })}
+          rows={3}
+          style={{width:'100%',padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px',fontSize:'13px',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical'}}
+        />
       </div>
     );
   }
@@ -697,7 +675,7 @@ class Dashboard extends React.Component {
                   </div>
                   
                   {/* COMMENTS */}
-                  {this.renderComments(r)}
+                  {this.renderNotes(r)}
                   
                   {/* ESTIMATE INPUT */}
                   {editingEstimate === r.ID ? (
@@ -773,7 +751,7 @@ class Dashboard extends React.Component {
                       {this.renderAttachments(r)}
                       
                       {/* COMMENTS */}
-                      {this.renderComments(r)}
+                      {this.renderNotes(r)}
                       
                       {/* EDIT ESTIMATE */}
                       <div style={{marginTop:'12px',display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
@@ -840,7 +818,7 @@ class Dashboard extends React.Component {
                   </div>
                   
                   {/* COMMENTS */}
-                  {this.renderComments(r)}
+                  {this.renderNotes(r)}
                   
                   {/* COMPLETION DATE */}
                   {editingCompletionDate === r.ID ? (
@@ -859,23 +837,23 @@ class Dashboard extends React.Component {
                     <button onClick={() => this.setState({editingCompletionDate: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px'}}>Set Completion Date</button>
                   )}
                   
-                  {/* PREVIEW URL */}
-                  {editingPreviewUrl === r.ID ? (
-                    <div style={{display:'flex',gap:'8px',marginTop:'12px',marginBottom:'12px'}}>
-                      <input 
-                        type="url"
-                        placeholder="https://preview.example.com"
-                        value={previewUrlInput}
-                        onChange={(e) => this.setState({previewUrlInput: e.target.value})}
-                        style={{flex:1,padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px'}}
-                        autoFocus
-                      />
-                      <button onClick={() => this.addPreviewUrl(r.ID, previewUrlInput)} disabled={!previewUrlInput} style={{padding:'8px 16px',background:!previewUrlInput?'#d1d5db':'#007299',color:'white',border:'none',borderRadius:'6px',cursor:!previewUrlInput?'not-allowed':'pointer',fontSize:'13px'}}>Save</button>
-                      <button onClick={() => this.setState({editingPreviewUrl:null,previewUrlInput:''})} style={{padding:'8px 16px',background:'#e5e7eb',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px'}}>Cancel</button>
-                    </div>
-                  ) : !r.PreviewUrl && (
-                    <button onClick={() => this.setState({editingPreviewUrl: r.ID})} style={{marginTop:'12px',padding:'8px 16px',background:'#f3f4f6',color:'#717271',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',marginBottom:'12px',marginRight:'8px'}}>Add Preview URL</button>
-                  )}
+                  {/* PREVIEW URL - Always visible text input */}
+                  <div style={{marginTop:'12px'}}>
+                    <label style={{fontSize:'13px',fontWeight:'600',color:'#003e51',display:'block',marginBottom:'6px'}}>Preview Channel URL:</label>
+                    <input 
+                      type="url"
+                      placeholder="https://preview.example.com"
+                      value={r.PreviewUrl || ''}
+                      onChange={(e) => {
+                        const updatedRequests = requests.map(req => 
+                          req.ID == r.ID ? { ...req, PreviewUrl: e.target.value } : req
+                        );
+                        this.setState({ requests: updatedRequests });
+                      }}
+                      onBlur={() => this.apiCall('updateRequest', { data: requests.find(req => req.ID == r.ID) })}
+                      style={{width:'100%',padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px',fontSize:'13px',boxSizing:'border-box'}}
+                    />
+                  </div>
                   
                   <button onClick={() => this.markAsDone(r.ID)} style={{marginTop:'12px',padding:'8px 16px',background:'#007299',color:'white',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'13px',fontWeight:'600'}}>Mark as Done</button>
                 </div>
