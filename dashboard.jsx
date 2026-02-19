@@ -177,26 +177,15 @@ class Dashboard extends React.Component {
     const attachType = this.state.newAttachmentType;
     const attachData = this.state.newAttachmentData;
     
-    // OPTIMISTIC UPDATE - show new request immediately
-    const tempRequest = {
-      ID: Date.now(),
-      Title: title,
-      Description: desc,
-      Status: 'pending',
-      SubmitterAttachmentType: attachType,
-      SubmitterAttachmentData: attachData,
-      Comments: []
-    };
-    
+    // Clear form immediately for better UX
     this.setState({ 
-      requests: [...this.state.requests, tempRequest],
       newTitle: '', 
       newDesc: '', 
       newAttachmentType: null, 
       newAttachmentData: null 
     });
     
-    // Save to backend in background
+    // Add to backend and reload to get real ID
     await this.apiCall('addRequest', {
       data: {
         title: title, 
@@ -204,9 +193,12 @@ class Dashboard extends React.Component {
         status: 'pending',
         submitterAttachmentType: attachType,
         submitterAttachmentData: attachData,
+        notes: '',
         comments: []
       }
     });
+    
+    // apiCall already triggers load() in background
   }
 
   del = async (id) => {
