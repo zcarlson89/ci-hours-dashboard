@@ -213,7 +213,7 @@ class Dashboard extends React.Component {
     const attachmentData = attachmentType === 'pdf' ? attachmentInput : (attachmentType === 'image' ? imagePreview : null);
     console.log('Final attachmentData length:', attachmentData ? attachmentData.length : 'null');
     
-    // OPTIMISTIC UPDATE - show change immediately
+    // OPTIMISTIC UPDATE - show change immediately, PRESERVE Notes
     const updatedRequests = requests.map(r => 
       r.ID == id ? {
         ...r,
@@ -221,7 +221,11 @@ class Dashboard extends React.Component {
         EstimatedHours: parseFloat(hours),
         Priority: maxPriority + 1,
         AttachmentType: attachmentType,
-        AttachmentData: attachmentData
+        AttachmentData: attachmentData,
+        // Preserve:
+        Notes: r.Notes,
+        SubmitterAttachmentType: r.SubmitterAttachmentType,
+        SubmitterAttachmentData: r.SubmitterAttachmentData
       } : r
     );
     
@@ -251,14 +255,14 @@ class Dashboard extends React.Component {
     const { requests, currentMonth } = this.state;
     const request = requests.find(r => r.ID == id);
     
-    // OPTIMISTIC UPDATE - show change immediately, PRESERVE Comments and Attachments
+    // OPTIMISTIC UPDATE - show change immediately, PRESERVE Notes and Attachments
     const updatedRequests = requests.map(r => 
       r.ID == id ? { 
         ...r, 
         Status: 'approved', 
         ApprovedMonth: currentMonth,
         // Keep these fields:
-        Comments: r.Comments || [],
+        Notes: r.Notes,
         SubmitterAttachmentType: r.SubmitterAttachmentType,
         SubmitterAttachmentData: r.SubmitterAttachmentData,
         AttachmentType: r.AttachmentType,
@@ -321,15 +325,15 @@ class Dashboard extends React.Component {
     const { requests } = this.state;
     const request = requests.find(r => r.ID == id);
     
-    // OPTIMISTIC UPDATE - preserve all fields including PreviewUrl
+    // OPTIMISTIC UPDATE - preserve all fields including Notes and PreviewUrl
     const updatedRequests = requests.map(r => 
       r.ID == id ? { 
         ...r, 
         Status: 'finished', 
         CompletedDate: new Date().toLocaleDateString(),
         // Preserve these fields:
+        Notes: r.Notes,
         PreviewUrl: r.PreviewUrl,
-        Comments: r.Comments || [],
         SubmitterAttachmentType: r.SubmitterAttachmentType,
         SubmitterAttachmentData: r.SubmitterAttachmentData,
         AttachmentType: r.AttachmentType,
@@ -354,8 +358,8 @@ class Dashboard extends React.Component {
         ...r, 
         Status: 'archived',
         // Preserve these fields:
+        Notes: r.Notes,
         PreviewUrl: r.PreviewUrl,
-        Comments: r.Comments || [],
         SubmitterAttachmentType: r.SubmitterAttachmentType,
         SubmitterAttachmentData: r.SubmitterAttachmentData,
         AttachmentType: r.AttachmentType,
@@ -480,12 +484,18 @@ class Dashboard extends React.Component {
           placeholder="Add notes or comments about this request..."
           value={request.Notes || ''}
           onChange={(e) => {
+            const newValue = e.target.value;
             const updatedRequests = requests.map(r => 
-              r.ID == request.ID ? { ...r, Notes: e.target.value } : r
+              r.ID == request.ID ? { ...r, Notes: newValue } : r
             );
             this.setState({ requests: updatedRequests });
           }}
-          onBlur={() => this.apiCall('updateRequest', { data: requests.find(r => r.ID == request.ID) })}
+          onBlur={(e) => {
+            const updatedRequest = requests.find(r => r.ID == request.ID);
+            if (updatedRequest) {
+              this.apiCall('updateRequest', { data: updatedRequest });
+            }
+          }}
           rows={3}
           style={{width:'100%',padding:'8px',border:'2px solid #e5e7eb',borderRadius:'6px',fontSize:'13px',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical'}}
         />
