@@ -191,10 +191,14 @@ class Dashboard extends React.Component {
   }
 
   del = async (id) => {
-    const { deleteConfirmId } = this.state;
+    const { deleteConfirmId, requests } = this.state;
     if (deleteConfirmId === id) {
+      // OPTIMISTIC UPDATE - remove immediately from UI
+      const updatedRequests = requests.filter(r => r.ID != id);
+      this.setState({ requests: updatedRequests, deleteConfirmId: null });
+      
+      // Delete from backend in background
       await this.apiCall('deleteRequest', { id });
-      this.setState({ deleteConfirmId: null });
     } else {
       this.setState({ deleteConfirmId: id });
     }
@@ -556,7 +560,6 @@ class Dashboard extends React.Component {
         <div style={{display:'flex',justifyContent:'space-between',marginBottom:'32px'}}>
           <div>
             <h1 style={{fontSize:'36px',fontWeight:'bold',color:'#003e51',marginBottom:'8px'}}>Continuous Improvement Hours Dashboard</h1>
-            <p style={{color:'#717271'}}>Complete collaborative workflow with comments & attachments</p>
           </div>
           <button onClick={this.load} disabled={syncing} style={{padding:'12px 24px',background:syncing?'#717271':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:syncing?'not-allowed':'pointer',height:'fit-content'}}>
             {syncing ? 'Syncing...' : '↻ Refresh'}
