@@ -497,11 +497,11 @@ class Dashboard extends React.Component {
         <label style={{fontSize:'13px',fontWeight:'600',color:'#003e51',display:'block',marginBottom:'6px'}}>Notes / Comments:</label>
         <textarea 
           placeholder="Add notes or comments about this request..."
-          value={request.Notes || ''}
+          value={request.Comments || ''}
           onChange={(e) => {
             const newValue = e.target.value;
             const updatedRequests = requests.map(r => 
-              r.ID == request.ID ? { ...r, Notes: newValue } : r
+              r.ID == request.ID ? { ...r, Comments: newValue } : r
             );
             this.setState({ requests: updatedRequests });
           }}
