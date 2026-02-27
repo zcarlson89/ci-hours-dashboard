@@ -52,90 +52,74 @@ class Dashboard extends React.Component {
   load = async () => {
     try {
       this.setState({ syncing: true });
-      const res = await fetch(window.GOOGLE_SCRIPT_URL + '?action=getAll&t=' + Date.now(), { method: 'POST' });
+      // Load from GitHub JSON file
+      const res = await fetch('./data.json?t=' + Date.now());
       const data = await res.json();
-      if (data.success) {
-        // Parse comments properly - they come as JSON strings from Google Sheets
-        const requestsWithParsedComments = (data.requests || []).map(req => {
-          let parsedComments = [];
-          
-          if (req.Comments) {
-            if (typeof req.Comments === 'string') {
-              try {
-                parsedComments = JSON.parse(req.Comments);
-                // If it's still a string after parsing (double-encoded), parse again
-                if (typeof parsedComments === 'string') {
-                  parsedComments = JSON.parse(parsedComments);
-                }
-              } catch (e) {
-                console.error('Error parsing comments for request', req.ID, ':', e);
-                parsedComments = [];
-              }
-            } else if (Array.isArray(req.Comments)) {
-              parsedComments = req.Comments;
-            }
-          }
-          
-          return {
-            ...req,
-            Comments: parsedComments
-          };
-        });
-        
-        console.log('Loaded requests with comments:', requestsWithParsedComments.filter(r => r.Comments && r.Comments.length > 0));
-        
-        this.setState({ 
-          requests: requestsWithParsedComments, 
-          monthlyHistory: data.history || {},
-          currentMonth: data.settings.current_month || this.getCurrentMonthKey()
-        });
-      }
+      
+      console.log('Loaded data from JSON:', data);
+      
+      this.setState({ 
+        requests: data.requests || [], 
+        monthlyHistory: data.monthlyHistory || {},
+        currentMonth: this.getCurrentMonthKey()
+      });
     } catch (e) {
       console.error('Load error:', e);
+      // Try loading from localStorage as backup
+      const backup = localStorage.getItem('dashboardData');
+      if (backup) {
+        const data = JSON.parse(backup);
+        this.setState({ 
+          requests: data.requests || [], 
+          monthlyHistory: data.monthlyHistory || {}
+        });
+      }
     } finally {
       this.setState({ syncing: false, loading: false });
     }
   }
 
+  saveData = async () => {
+    const { requests, monthlyHistory } = this.state;
+    const data = {
+      requests,
+      monthlyHistory,
+      settings: {
+        currentMonth: this.getCurrentMonthKey()
+      }
+    };
+    
+    // Save to localStorage
+    localStorage.setItem('dashboardData', JSON.stringify(data));
+    console.log('Data saved to localStorage');
+    return true;
+  }
+
+  exportData = () => {
+    const { requests, monthlyHistory } = this.state;
+    const data = {
+      requests,
+      monthlyHistory,
+      settings: {
+        currentMonth: this.getCurrentMonthKey()
+      }
+    };
+    
+    const dataStr = JSON.stringify(data, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'data.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    alert('Data exported! Replace the data.json file in your GitHub repo and commit the changes.');
+  }
+
   apiCall = async (action, params = {}) => {
-    // Don't show syncing spinner for better perceived performance
-    try {
-      const fd = new URLSearchParams();
-      fd.append('action', action);
-      Object.keys(params).forEach(key => {
-        fd.append(key, typeof params[key] === 'object' ? JSON.stringify(params[key]) : params[key]);
-      });
-      
-      console.log('API Call:', action, 'with params:', params);
-      
-      const res = await fetch(window.GOOGLE_SCRIPT_URL, { method: 'POST', body: fd });
-      
-      console.log('Response status:', res.status);
-      console.log('Response ok:', res.ok);
-      
-      if (!res.ok) {
-        console.error('API call failed with status:', res.status);
-        alert('Save failed! Check console for details. Status: ' + res.status);
-        return false;
-      }
-      
-      const result = await res.json();
-      console.log('API result:', result);
-      
-      if (result.success) {
-        // Only reload in background, don't wait
-        this.load();
-        return true;
-      } else {
-        console.error('API returned success=false:', result);
-        alert('Save failed! Error: ' + (result.error || 'Unknown error'));
-        return false;
-      }
-    } catch (e) {
-      console.error('API call exception:', e);
-      alert('Save failed! Exception: ' + e.message + '\n\nCheck that your Google Apps Script is deployed correctly.');
-      return false;
-    }
+    // All operations now save to localStorage
+    await this.saveData();
+    return true;
   }
 
   handleFileUpload = (e, type, target) => {
@@ -497,11 +481,11 @@ class Dashboard extends React.Component {
         <label style={{fontSize:'13px',fontWeight:'600',color:'#003e51',display:'block',marginBottom:'6px'}}>Notes / Comments:</label>
         <textarea 
           placeholder="Add notes or comments about this request..."
-          value={request.Comments || ''}
+          value={request.Notes || ''}
           onChange={(e) => {
             const newValue = e.target.value;
             const updatedRequests = requests.map(r => 
-              r.ID == request.ID ? { ...r, Comments: newValue } : r
+              r.ID == request.ID ? { ...r, Notes: newValue } : r
             );
             this.setState({ requests: updatedRequests });
           }}
@@ -572,9 +556,14 @@ class Dashboard extends React.Component {
           <div>
             <h1 style={{fontSize:'36px',fontWeight:'bold',color:'#003e51',marginBottom:'8px'}}>Continuous Improvement Hours Dashboard</h1>
           </div>
-          <button onClick={this.load} disabled={syncing} style={{padding:'12px 24px',background:syncing?'#717271':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:syncing?'not-allowed':'pointer',height:'fit-content'}}>
-            {syncing ? 'Syncing...' : '↻ Refresh'}
-          </button>
+          <div style={{display:'flex',gap:'12px'}}>
+            <button onClick={this.exportData} style={{padding:'12px 24px',background:'#10b981',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',height:'fit-content',fontWeight:'600'}}>
+              📥 Export Data
+            </button>
+            <button onClick={this.load} disabled={syncing} style={{padding:'12px 24px',background:syncing?'#717271':'#007299',color:'white',border:'none',borderRadius:'8px',cursor:syncing?'not-allowed':'pointer',height:'fit-content'}}>
+              {syncing ? 'Syncing...' : '↻ Refresh'}
+            </button>
+          </div>
         </div>
 
         {/* Budget Tracker */}
